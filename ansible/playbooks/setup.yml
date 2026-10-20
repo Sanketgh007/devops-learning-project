@@ -1,0 +1,52 @@
+---
+# Ansible playbook for initial server setup
+
+- name: Initial Server Setup
+  hosts: app_servers
+  become: yes
+  
+  tasks:
+    - name: Create deployment user
+      user:
+        name: deploy
+        shell: /bin/bash
+        createhome: yes
+        groups: wheel
+        append: yes
+    
+    - name: Configure SSH for deployment user
+      authorized_key:
+        user: deploy
+        key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+        state: present
+    
+    - name: Configure firewall
+      firewalld:
+        port: "{{ item }}/tcp"
+        permanent: yes
+        state: enabled
+      loop:
+        - 22    # SSH
+        - 80    # HTTP
+        - 443   # HTTPS
+        - 5000  # Flask App
+        - 9090  # Prometheus
+        - 3000  # Grafana
+      when: ansible_os_family == "RedHat"
+    
+    - name: Reload firewall
+      systemd:
+        name: firewalld
+        state: reloaded
+      when: ansible_os_family == "RedHat"
+    
+    - name: Set timezone
+      timezone:
+        name: UTC
+    
+    - name: Install monitoring agent
+      yum:
+        name: node_exporter
+        state: present
+      when: ansible_os_family == "RedHat"
+      ignore_errors: yes
